@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #0d1f35;
+  --navy2: #162d47;
+  --cyan: #00b4d8;
+  --cyan2: #90e0ef;
+  --gold: #f5a623;
+  --green: #2ecc71;
+  --red: #e74c3c;
+  --white: #f0f6ff;
+  --muted: #6b8aaa;
+  --card: #152842;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--navy);
+  color: var(--white);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+
+.font-display { font-family: 'Bebas Neue', sans-serif; }
+.font-mono    { font-family: 'DM Mono', monospace; }
+
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-down { animation: fadeDown .5s ease both; }
+.animate-fade-up   { animation: fadeUp .5s ease both; }
+.animate-spin-slow { animation: spin 1s linear infinite; }
