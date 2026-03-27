@@ -108,13 +108,13 @@ function UploadScreen({ onFile }: { onFile: (f: File) => void }) {
   }, [onFile])
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: 'var(--navy)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: '#0d1f35' }}>
       {/* Logo */}
       <div style={{ marginBottom: 48, textAlign: 'center' }} className="animate-fade-down">
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 52, letterSpacing: 6, color: 'var(--white)', lineHeight: 1 }}>
-          HIVO<span style={{ color: 'var(--cyan)' }}>LTA</span>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 52, letterSpacing: 6, color: '#f0f6ff', lineHeight: 1 }}>
+          HIVO<span style={{ color: '#00b4d8' }}>LTA</span>
         </div>
-        <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--muted)', marginTop: 6 }}>
+        <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#6b8aaa', marginTop: 6 }}>
           Verkoopoverzicht Dashboard
         </div>
       </div>
@@ -128,9 +128,9 @@ function UploadScreen({ onFile }: { onFile: (f: File) => void }) {
         onClick={() => inputRef.current?.click()}
         style={{
           width: '100%', maxWidth: 480,
-          border: `2px dashed ${drag ? 'var(--cyan)' : 'rgba(0,180,216,.3)'}`,
+          border: `2px dashed ${drag ? '#00b4d8' : 'rgba(0,180,216,.3)'}`,
           borderRadius: 20,
-          background: drag ? 'rgba(0,180,216,.06)' : 'var(--card)',
+          background: drag ? 'rgba(0,180,216,.06)' : '#152842',
           padding: '52px 32px',
           textAlign: 'center',
           cursor: 'pointer',
@@ -139,16 +139,16 @@ function UploadScreen({ onFile }: { onFile: (f: File) => void }) {
         }}
       >
         <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 2, color: 'var(--cyan)', marginBottom: 8 }}>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 2, color: '#00b4d8', marginBottom: 8 }}>
           Sleep je Excel hier naartoe
         </div>
-        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>
+        <div style={{ fontSize: 13, color: '#6b8aaa', marginBottom: 24 }}>
           of klik om een bestand te kiezen
         </div>
         <div style={{
           display: 'inline-block',
-          background: 'var(--cyan)',
-          color: 'var(--navy)',
+          background: '#00b4d8',
+          color: '#0d1f35',
           fontWeight: 700,
           fontSize: 13,
           padding: '10px 28px',
@@ -157,7 +157,7 @@ function UploadScreen({ onFile }: { onFile: (f: File) => void }) {
         }}>
           Bestand kiezen
         </div>
-        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 20, letterSpacing: 1 }}>
+        <div style={{ fontSize: 11, color: '#6b8aaa', marginTop: 20, letterSpacing: 1 }}>
           .xlsx · export-sales-by-account-manager
         </div>
         <input
@@ -179,7 +179,7 @@ function UploadScreen({ onFile }: { onFile: (f: File) => void }) {
             padding: '4px 12px',
             fontSize: 11,
             fontFamily: "'DM Mono'",
-            color: 'var(--cyan2)',
+            color: '#90e0ef',
             letterSpacing: 1,
           }}>{col}</span>
         ))}
@@ -204,23 +204,85 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
     if (!dashRef.current) return
     setSaving(true)
     try {
-      const canvas = await html2canvas(dashRef.current, {
+      const el = dashRef.current
+
+      // Temporarily inject a <style> that overrides the :root vars with hardcoded values
+      // so html2canvas sees real colours even in computed styles
+      const styleTag = document.createElement('style')
+      styleTag.id = 'hv-export-style'
+      styleTag.textContent = `
+        #hv-dashboard-root * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      `
+      document.head.appendChild(styleTag)
+
+      // Small delay so fonts are loaded
+      await new Promise(r => setTimeout(r, 200))
+
+      const canvas = await html2canvas(el, {
         backgroundColor: '#0d1f35',
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
+        onclone: (doc, clonedEl) => {
+          // Force background on root
+          clonedEl.style.background = '#0d1f35'
+          clonedEl.style.minHeight  = 'auto'
+
+          // Walk every element and replace any residual var(--x) in inline styles
+          const vars: Record<string, string> = {
+            '--navy':  '#0d1f35',
+            '--navy2': '#162d47',
+            '--cyan':  '#00b4d8',
+            '--cyan2': '#90e0ef',
+            '--gold':  '#f5a623',
+            '--green': '#2ecc71',
+            '--red':   '#e74c3c',
+            '--white': '#f0f6ff',
+            '--muted': '#6b8aaa',
+            '--card':  '#152842',
+          }
+          const walk = (node: HTMLElement) => {
+            const s = node.style
+            for (let i = 0; i < s.length; i++) {
+              const p = s[i]
+              let v = s.getPropertyValue(p)
+              if (v.includes('var(')) {
+                for (const [k, hex] of Object.entries(vars))
+                  v = v.replaceAll(`var(${k})`, hex)
+                s.setProperty(p, v)
+              }
+            }
+            // Also inject a :root block into the cloned document head
+            Array.from(node.children).forEach(c => walk(c as HTMLElement))
+          }
+
+          // Inject CSS vars into cloned doc
+          const st = doc.createElement('style')
+          st.textContent = ':root {--navy:#0d1f35;--navy2:#162d47;--cyan:#00b4d8;--cyan2:#90e0ef;--gold:#f5a623;--green:#2ecc71;--red:#e74c3c;--white:#f0f6ff;--muted:#6b8aaa;--card:#152842;}'
+          doc.head.appendChild(st)
+          walk(clonedEl)
+        },
       })
+
+      document.getElementById('hv-export-style')?.remove()
+
       const link = document.createElement('a')
       link.download = `hivolta-dashboard-${period.replace(/\s/g, '-').toLowerCase()}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
+    } catch (err) {
+      console.error('Export failed:', err)
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--navy)', position: 'relative' }}>
+    <div style={{ minHeight: '100vh', background: '#0d1f35', position: 'relative' }}>
       {/* Top toolbar */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 50,
@@ -230,9 +292,9 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
         padding: '12px 32px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 4, color: 'var(--white)' }}>
-          HIVO<span style={{ color: 'var(--cyan)' }}>LTA</span>
-          <span style={{ fontSize: 13, letterSpacing: 2, color: 'var(--muted)', marginLeft: 16, fontFamily: "'DM Sans'", fontWeight: 400 }}>
+        <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 4, color: '#f0f6ff' }}>
+          HIVO<span style={{ color: '#00b4d8' }}>LTA</span>
+          <span style={{ fontSize: 13, letterSpacing: 2, color: '#6b8aaa', marginLeft: 16, fontFamily: "'DM Sans'", fontWeight: 400 }}>
             {period}
           </span>
         </div>
@@ -240,7 +302,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
           <button onClick={onReset} style={{
             background: 'transparent',
             border: '1px solid rgba(0,180,216,.3)',
-            color: 'var(--muted)',
+            color: '#6b8aaa',
             borderRadius: 99,
             padding: '8px 20px',
             fontSize: 12,
@@ -248,14 +310,14 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
             fontFamily: "'DM Sans'",
             transition: 'all .2s',
           }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--cyan)')}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = '#00b4d8')}
           onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(0,180,216,.3)')}
           >
             ← Nieuw bestand
           </button>
           <button onClick={saveImage} disabled={saving} style={{
-            background: saving ? 'rgba(0,180,216,.3)' : 'var(--cyan)',
-            color: 'var(--navy)',
+            background: saving ? 'rgba(0,180,216,.3)' : '#00b4d8',
+            color: '#0d1f35',
             border: 'none',
             borderRadius: 99,
             padding: '8px 24px',
@@ -267,7 +329,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
             transition: 'all .2s',
           }}>
             {saving ? (
-              <><span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid var(--navy)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Opslaan...</>
+              <><span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid #0d1f35', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Opslaan...</>
             ) : (
               <><span>⬇</span> Opslaan als afbeelding</>
             )}
@@ -276,7 +338,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
       </div>
 
       {/* Dashboard content */}
-      <div ref={dashRef} style={{ padding: '48px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
+      <div ref={dashRef} id="hv-dashboard-root" style={{ padding: '48px 32px 64px', maxWidth: 1100, margin: '0 auto' }}>
 
         {/* Header */}
         <div className="animate-fade-down" style={{
@@ -285,29 +347,29 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
           paddingBottom: 28, marginBottom: 44,
         }}>
           <div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 46, letterSpacing: 4, color: 'var(--white)', lineHeight: 1 }}>
-              HIVO<span style={{ color: 'var(--cyan)' }}>LTA</span>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 46, letterSpacing: 4, color: '#f0f6ff', lineHeight: 1 }}>
+              HIVO<span style={{ color: '#00b4d8' }}>LTA</span>
             </div>
-            <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--muted)', marginTop: 4 }}>
+            <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#6b8aaa', marginTop: 4 }}>
               Smart Energy Solutions
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--muted)' }}>Verkoopoverzicht</div>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 2, color: 'var(--cyan)' }}>{period}</div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#6b8aaa' }}>Verkoopoverzicht</div>
+            <div style={{ fontFamily: "'Bebas Neue'", fontSize: 22, letterSpacing: 2, color: '#00b4d8' }}>{period}</div>
           </div>
         </div>
 
         {/* KPI strip */}
         <div className="animate-fade-up" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 44 }}>
           {[
-            { label: 'Totale Omzet',  val: fmt(totalOmzet),  sub: `${totalLeads} leads · ${sellers.length} verkopers`, accent: 'var(--cyan)',  top: 'var(--cyan)' },
-            { label: 'Bruto Marge',   val: fmt(totalMarge),  sub: pct(totalMarge/totalOmzet) + ' van omzet',            accent: 'var(--gold)',  top: 'var(--gold)' },
-            { label: 'Netto Marge',   val: fmt(totalNetto),  sub: pct(totalNetto/totalOmzet) + ' na commissies',        accent: 'var(--green)', top: 'var(--green)' },
-            { label: 'Commissies',    val: fmt(totalComm),   sub: pct(totalComm/totalOmzet) + ' van omzet',             accent: 'var(--muted)', top: 'var(--muted)' },
+            { label: 'Totale Omzet',  val: fmt(totalOmzet),  sub: `${totalLeads} leads · ${sellers.length} verkopers`, accent: '#00b4d8',  top: '#00b4d8' },
+            { label: 'Bruto Marge',   val: fmt(totalMarge),  sub: pct(totalMarge/totalOmzet) + ' van omzet',            accent: '#f5a623',  top: '#f5a623' },
+            { label: 'Netto Marge',   val: fmt(totalNetto),  sub: pct(totalNetto/totalOmzet) + ' na commissies',        accent: '#2ecc71', top: '#2ecc71' },
+            { label: 'Commissies',    val: fmt(totalComm),   sub: pct(totalComm/totalOmzet) + ' van omzet',             accent: '#6b8aaa', top: '#6b8aaa' },
           ].map((k, i) => (
             <div key={i} style={{
-              background: 'var(--card)',
+              background: '#152842',
               border: '1px solid rgba(0,180,216,.12)',
               borderRadius: 14,
               padding: '22px 20px 18px',
@@ -317,9 +379,9 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
             onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-3px)')}
             onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
             >
-              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>{k.label}</div>
+              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: '#6b8aaa', marginBottom: 10 }}>{k.label}</div>
               <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, letterSpacing: 1, color: k.accent, lineHeight: 1 }}>{k.val}</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6, fontFamily: "'DM Mono'" }}>{k.sub}</div>
+              <div style={{ fontSize: 11, color: '#6b8aaa', marginTop: 6, fontFamily: "'DM Mono'" }}>{k.sub}</div>
             </div>
           ))}
         </div>
@@ -328,7 +390,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
         <SectionTitle>Omzetverdeling per verkoper</SectionTitle>
         <div className="animate-fade-up" style={{
           display: 'flex', alignItems: 'center', gap: 28,
-          background: 'var(--card)', border: '1px solid rgba(0,180,216,.12)',
+          background: '#152842', border: '1px solid rgba(0,180,216,.12)',
           borderRadius: 16, padding: '24px 28px', marginBottom: 44,
         }}>
           <Donut sellers={sellers} />
@@ -338,7 +400,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.alias}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'DM Mono'", marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#6b8aaa', fontFamily: "'DM Mono'", marginTop: 2 }}>
                     {fmt(s.omzet)} · {pct(s.aandeel)}
                   </div>
                 </div>
@@ -364,7 +426,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
                 {['Verkoper','Leads','Omzet','Inkoopprijs','Bruto Marge','Marge %','Commissie','Netto Marge','Netto %'].map(h => (
                   <th key={h} style={{
                     fontSize: 9, letterSpacing: 2, textTransform: 'uppercase',
-                    color: 'var(--muted)', fontWeight: 500, padding: '0 14px 10px',
+                    color: '#6b8aaa', fontWeight: 500, padding: '0 14px 10px',
                     textAlign: h === 'Verkoper' ? 'left' : 'right',
                   }}>{h}</th>
                 ))}
@@ -373,15 +435,15 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
             <tbody>
               {sellers.map((s, i) => (
                 <tr key={i}>
-                  <Td left><span style={{ fontWeight: 700 }}>{s.name}</span>{s.owner && <span style={{ background: 'rgba(245,166,35,.15)', color: 'var(--gold)', borderRadius: 4, padding: '1px 6px', fontSize: 9, marginLeft: 6 }}>eigenaar</span>}</Td>
-                  <Td color="var(--cyan2)">{s.leads}</Td>
-                  <Td color="var(--cyan2)">{fmt(s.omzet)}</Td>
-                  <Td color="var(--muted)">{fmt(s.inkoop)}</Td>
-                  <Td color="var(--white)">{fmt(s.marge)}</Td>
-                  <Td color="var(--white)">{pct(s.margePct)}</Td>
-                  <Td color="var(--muted)">{s.commEur > 0 ? fmt(s.commEur) : '—'}</Td>
-                  <Td color="var(--green)" bold>{fmt(s.nettoMarge)}</Td>
-                  <Td color="var(--green)">{pct(s.nettoPct)}</Td>
+                  <Td left><span style={{ fontWeight: 700 }}>{s.name}</span>{s.owner && <span style={{ background: 'rgba(245,166,35,.15)', color: '#f5a623', borderRadius: 4, padding: '1px 6px', fontSize: 9, marginLeft: 6 }}>eigenaar</span>}</Td>
+                  <Td color="#90e0ef">{s.leads}</Td>
+                  <Td color="#90e0ef">{fmt(s.omzet)}</Td>
+                  <Td color="#6b8aaa">{fmt(s.inkoop)}</Td>
+                  <Td color="#f0f6ff">{fmt(s.marge)}</Td>
+                  <Td color="#f0f6ff">{pct(s.margePct)}</Td>
+                  <Td color="#6b8aaa">{s.commEur > 0 ? fmt(s.commEur) : '—'}</Td>
+                  <Td color="#2ecc71" bold>{fmt(s.nettoMarge)}</Td>
+                  <Td color="#2ecc71">{pct(s.nettoPct)}</Td>
                 </tr>
               ))}
               {/* Total row */}
@@ -405,7 +467,7 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
         <div className="animate-fade-up" style={{ display: 'grid', gridTemplateColumns: `repeat(${sellers.length},1fr)`, gap: 14, marginBottom: 44 }}>
           {sellers.map((s, i) => (
             <div key={i} style={{
-              background: 'var(--card)',
+              background: '#152842',
               border: `1px solid ${s.owner ? 'rgba(245,166,35,.2)' : 'rgba(0,180,216,.12)'}`,
               borderRadius: 12, padding: '18px 16px', textAlign: 'center',
               transition: 'transform .2s',
@@ -413,11 +475,11 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
             onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-3px)')}
             onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--white)', marginBottom: 8 }}>{s.alias}</div>
-              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, color: s.owner ? 'var(--gold)' : 'var(--cyan)', lineHeight: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#f0f6ff', marginBottom: 8 }}>{s.alias}</div>
+              <div style={{ fontFamily: "'Bebas Neue'", fontSize: 32, color: s.owner ? '#f5a623' : '#00b4d8', lineHeight: 1 }}>
                 {(s.commPct * 100).toFixed(0)}%
               </div>
-              <div style={{ fontFamily: "'DM Mono'", fontSize: 12, color: s.owner ? 'var(--gold)' : 'var(--muted)', marginTop: 6 }}>
+              <div style={{ fontFamily: "'DM Mono'", fontSize: 12, color: s.owner ? '#f5a623' : '#6b8aaa', marginTop: 6 }}>
                 {s.owner ? 'eigenaar' : fmt(s.commEur)}
               </div>
             </div>
@@ -429,10 +491,10 @@ function DashboardView({ sellers, period, onReset }: { sellers: Seller[]; period
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           borderTop: '1px solid rgba(0,180,216,.12)', paddingTop: 24,
         }}>
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 3, color: 'var(--muted)' }}>
-            HIVO<span style={{ color: 'var(--cyan)' }}>LTA</span>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 3, color: '#6b8aaa' }}>
+            HIVO<span style={{ color: '#00b4d8' }}>LTA</span>
           </div>
-          <div style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: 1 }}>Vertrouwelijk — intern gebruik</div>
+          <div style={{ fontSize: 10, color: '#6b8aaa', letterSpacing: 1 }}>Vertrouwelijk — intern gebruik</div>
         </div>
 
       </div>
@@ -445,7 +507,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       fontSize: 10, letterSpacing: 3, textTransform: 'uppercase',
-      color: 'var(--muted)', marginBottom: 20,
+      color: '#6b8aaa', marginBottom: 20,
       display: 'flex', alignItems: 'center', gap: 12,
     }}>
       {children}
@@ -460,13 +522,13 @@ function Td({ children, left, color, bold, total }: {
 }) {
   return (
     <td style={{
-      background: total ? 'rgba(0,180,216,.12)' : 'var(--card)',
+      background: total ? 'rgba(0,180,216,.12)' : '#152842',
       padding: '14px 14px',
       fontFamily: left ? "'DM Sans'" : "'DM Mono'",
       fontSize: total && left ? 14 : 13,
       fontFamily2: total && left ? "'Bebas Neue'" : undefined,
       textAlign: left ? 'left' : 'right',
-      color: total ? 'var(--cyan2)' : (color || 'var(--white)'),
+      color: total ? '#90e0ef' : (color || '#f0f6ff'),
       fontWeight: bold || total ? 700 : 400,
       borderTop: `1px solid ${total ? 'rgba(0,180,216,.2)' : 'rgba(0,180,216,.07)'}`,
       borderBottom: `1px solid ${total ? 'rgba(0,180,216,.2)' : 'rgba(0,180,216,.07)'}`,
@@ -477,7 +539,7 @@ function Td({ children, left, color, bold, total }: {
       } : {}),
     } as React.CSSProperties}>
       {total && left
-        ? <span style={{ fontFamily: "'Bebas Neue'", fontSize: 15, letterSpacing: 2, color: 'var(--cyan)' }}>{children}</span>
+        ? <span style={{ fontFamily: "'Bebas Neue'", fontSize: 15, letterSpacing: 2, color: '#00b4d8' }}>{children}</span>
         : children}
     </td>
   )
@@ -492,7 +554,7 @@ function SellerCard({ seller: s, rank, maxOmzet }: { seller: Seller; rank: numbe
 
   return (
     <div style={{
-      background: 'var(--card)',
+      background: '#152842',
       border: '1px solid rgba(0,180,216,.12)',
       borderTop: `3px solid ${s.color}`,
       borderRadius: 16, padding: 24,
@@ -505,15 +567,15 @@ function SellerCard({ seller: s, rank, maxOmzet }: { seller: Seller; rank: numbe
       {/* Ghost rank */}
       <div style={{ position: 'absolute', top: 14, right: 18, fontFamily: "'Bebas Neue'", fontSize: 52, color: 'rgba(255,255,255,.04)', lineHeight: 1 }}>#{rank}</div>
 
-      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--white)', marginBottom: 2 }}>{s.name}</div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: '#f0f6ff', marginBottom: 2 }}>{s.name}</div>
+      <div style={{ fontSize: 11, color: '#6b8aaa', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
         {s.leads} leads
         <span style={{
           background: s.owner ? 'rgba(245,166,35,.1)' : 'rgba(0,180,216,.12)',
           border: `1px solid ${s.owner ? 'rgba(245,166,35,.25)' : 'rgba(0,180,216,.2)'}`,
           borderRadius: 20, padding: '2px 9px',
           fontSize: 10, fontFamily: "'DM Mono'",
-          color: s.owner ? 'var(--gold)' : 'var(--cyan2)',
+          color: s.owner ? '#f5a623' : '#90e0ef',
           letterSpacing: 1,
         }}>
           {s.owner ? 'eigenaar · 0%' : `${(s.commPct * 100).toFixed(0)}% commissie`}
@@ -523,12 +585,12 @@ function SellerCard({ seller: s, rank, maxOmzet }: { seller: Seller; rank: numbe
       {/* Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 18 }}>
         {[
-          { label: 'Omzet', val: fmt(s.omzet), color: 'var(--cyan)' },
-          { label: 'Bruto marge', val: pct(s.margePct), color: 'var(--white)' },
-          { label: 'Netto marge', val: fmt(s.nettoMarge), color: 'var(--green)' },
+          { label: 'Omzet', val: fmt(s.omzet), color: '#00b4d8' },
+          { label: 'Bruto marge', val: pct(s.margePct), color: '#f0f6ff' },
+          { label: 'Netto marge', val: fmt(s.nettoMarge), color: '#2ecc71' },
         ].map((m, i) => (
           <div key={i} style={{ background: 'rgba(255,255,255,.03)', borderRadius: 10, padding: '10px 12px' }}>
-            <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>{m.label}</div>
+            <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: '#6b8aaa', marginBottom: 4 }}>{m.label}</div>
             <div style={{ fontFamily: "'DM Mono'", fontSize: 14, fontWeight: 500, color: m.color }}>{m.val}</div>
           </div>
         ))}
@@ -536,7 +598,7 @@ function SellerCard({ seller: s, rank, maxOmzet }: { seller: Seller; rank: numbe
 
       {/* Bar */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#6b8aaa', marginBottom: 6 }}>
           <span>Aandeel omzet</span>
           <span style={{ color: s.color }}>{pct(s.aandeel)}</span>
         </div>
@@ -554,7 +616,7 @@ function SellerCard({ seller: s, rank, maxOmzet }: { seller: Seller; rank: numbe
         ].map((col, i) => (
           <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
             {col.h > 0 && <div style={{ width: '100%', height: col.h, background: col.color, borderRadius: '4px 4px 0 0', minHeight: 4 }} />}
-            <div style={{ fontSize: 8, color: 'var(--muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{col.label}</div>
+            <div style={{ fontSize: 8, color: '#6b8aaa', textAlign: 'center', whiteSpace: 'nowrap' }}>{col.label}</div>
           </div>
         ))}
       </div>
@@ -650,17 +712,17 @@ export default function Dashboard() {
   }
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)', gap: 20 }}>
-      <div style={{ width: 48, height: 48, border: '3px solid rgba(0,180,216,.2)', borderTopColor: 'var(--cyan)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-      <div style={{ fontFamily: "'DM Mono'", fontSize: 13, color: 'var(--muted)', letterSpacing: 2 }}>Bestand verwerken…</div>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0d1f35', gap: 20 }}>
+      <div style={{ width: 48, height: 48, border: '3px solid rgba(0,180,216,.2)', borderTopColor: '#00b4d8', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <div style={{ fontFamily: "'DM Mono'", fontSize: 13, color: '#6b8aaa', letterSpacing: 2 }}>Bestand verwerken…</div>
     </div>
   )
 
   if (error) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)', gap: 20 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0d1f35', gap: 20 }}>
       <div style={{ fontSize: 40 }}>⚠️</div>
-      <div style={{ color: 'var(--red)', fontFamily: "'DM Mono'", fontSize: 13 }}>{error}</div>
-      <button onClick={() => setError('')} style={{ background: 'var(--cyan)', color: 'var(--navy)', border: 'none', borderRadius: 99, padding: '10px 28px', fontWeight: 700, cursor: 'pointer' }}>Opnieuw proberen</button>
+      <div style={{ color: '#e74c3c', fontFamily: "'DM Mono'", fontSize: 13 }}>{error}</div>
+      <button onClick={() => setError('')} style={{ background: '#00b4d8', color: '#0d1f35', border: 'none', borderRadius: 99, padding: '10px 28px', fontWeight: 700, cursor: 'pointer' }}>Opnieuw proberen</button>
     </div>
   )
 
